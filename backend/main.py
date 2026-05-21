@@ -251,16 +251,17 @@ except Exception as e:
     print(f"   Error type: {type(e).__name__}")
     classifier = None
 
-# Label mappings (Binary classifier: 0=Spam/Scam, 1=Safe/Ham)
+# Label mappings (Binary classifier: 0=Safe/Ham, 1=Scam/Spam)
+# Based on training: (label == 'Scam').astype(int) → 0=Not Scam, 1=Scam
 LABEL_NAMES = {
-    0: "Spam/Scam",
-    1: "Safe Message"
+    0: "Safe Message",
+    1: "Spam/Scam"
 }
 
 # Emoji indicators
 EMOJI_MAP = {
-    0: "🚨",  # Scam
-    1: "✅",  # Safe
+    0: "✅",  # Safe
+    1: "🚨",  # Scam
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -388,8 +389,8 @@ async def analyze_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             label_name = LABEL_NAMES.get(label_id, "Unknown")
             save_to_cache(user_message, message_hash, label_id, label_name, confidence)
 
-        # Determine if it's a scam (Label 0 = Spam/Scam, Label 1 = Safe)
-        is_scam = label_id == 0
+        # Determine if it's a scam (Label 0 = Safe, Label 1 = Scam)
+        is_scam = label_id == 1
 
         # Build response
         emoji = EMOJI_MAP.get(label_id, "❓")
