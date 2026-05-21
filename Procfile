@@ -1,1 +1,1 @@
-﻿cd backend && python main.py
+﻿worker: cd backend && python main.py
