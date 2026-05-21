@@ -154,7 +154,7 @@ def download_model_from_google_drive():
     model_path = Path("../scam_detector_bert_final")
 
     # If model already exists locally, use it
-    if model_path.exists():
+    if model_path.exists() and (model_path / "config.json").exists():
         print("✅ Model found locally!")
         return
 
@@ -172,14 +172,43 @@ def download_model_from_google_drive():
 
     try:
         print("📥 Downloading model from Google Drive...")
+
+        # Create a temporary directory for download
+        temp_dir = Path("../scam_detector_bert_final_temp")
         model_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Download folder
+        # Download folder to temp location
         gdown.download_folder(
             id=GOOGLE_DRIVE_FOLDER_ID,
-            output="../scam_detector_bert_final",
+            output=str(temp_dir),
             quiet=False
         )
+
+        # Check if files are in nested folder and move them
+        downloaded_content = list(temp_dir.iterdir())
+        if len(downloaded_content) == 1 and downloaded_content[0].is_dir():
+            # Files are nested, move them up
+            nested_folder = downloaded_content[0]
+            if (nested_folder / "config.json").exists():
+                print("  Reorganizing nested folder structure...")
+                # Remove old folder if it exists
+                if model_path.exists():
+                    shutil.rmtree(model_path)
+                # Rename nested folder to correct location
+                nested_folder.rename(model_path)
+                shutil.rmtree(temp_dir)
+            else:
+                # Move all files from nested folder
+                model_path.mkdir(parents=True, exist_ok=True)
+                for file in nested_folder.iterdir():
+                    shutil.move(str(file), str(model_path / file.name))
+                shutil.rmtree(temp_dir)
+        else:
+            # Files are at root level, move them directly
+            if model_path.exists():
+                shutil.rmtree(model_path)
+            temp_dir.rename(model_path)
+
         print("✅ Model downloaded successfully!")
     except Exception as e:
         print(f"❌ Error downloading model: {e}")
