@@ -2,10 +2,12 @@ import os
 import logging
 import sqlite3
 import hashlib
+import re
 from datetime import datetime
 from transformers import pipeline
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.request import HTTPXRequest
 
 # Enable logging
 logging.basicConfig(
@@ -53,8 +55,16 @@ def init_database():
     print("✅ Database initialized!")
 
 def hash_message(message: str) -> str:
-    """Hash a message using SHA256 for fast searching."""
-    return hashlib.sha256(message.lower().strip().encode()).hexdigest()
+    """Hash a message using SHA256 for fast searching.
+
+    Normalizes message by:
+    - Converting to lowercase
+    - Removing all special characters, spaces, and newlines
+    - Keeping only alphanumeric characters
+    """
+    # Convert to lowercase and remove all non-alphanumeric characters
+    normalized = re.sub(r'[^a-z0-9]', '', message.lower())
+    return hashlib.sha256(normalized.encode()).hexdigest()
 
 def check_cache(message_hash: str) -> dict or None:
     """Check if message hash exists in database."""
@@ -136,7 +146,7 @@ print("Loading trained SCAMCHECK model...")
 try:
     classifier = pipeline(
         "text-classification",
-        model="./scam_detector_bert_final",
+        model="../scam_detector_bert_final",
         device=-1  # Use CPU (-1), change to 0 for GPU
     )
     print("✅ Model loaded successfully!")
@@ -144,25 +154,16 @@ except Exception as e:
     print(f"❌ Error loading model: {e}")
     classifier = None
 
-# Label mappings
+# Label mappings (Binary classifier: 0=Spam/Scam, 1=Safe/Ham)
 LABEL_NAMES = {
-    0: "General",
-    1: "Official",
-    2: "Scam",
-    3: "Unknown",
-    4: "Verification Call",
-    # SMS dataset labels
-    "ham": "Safe Message",
-    "spam": "Spam/Scam"
+    0: "Spam/Scam",
+    1: "Safe Message"
 }
 
 # Emoji indicators
 EMOJI_MAP = {
-    0: "✅",  # General
-    1: "✅",  # Official
-    2: "🚨",  # Scam
-    3: "❓",  # Unknown
-    4: "📞",  # Verification Call
+    0: "🚨",  # Scam
+    1: "✅",  # Safe
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -290,8 +291,8 @@ async def analyze_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             label_name = LABEL_NAMES.get(label_id, "Unknown")
             save_to_cache(user_message, message_hash, label_id, label_name, confidence)
 
-        # Determine if it's a scam
-        is_scam = label_id == 2  # Label 2 is "Scam"
+        # Determine if it's a scam (Label 0 = Spam/Scam, Label 1 = Safe)
+        is_scam = label_id == 0
 
         # Build response
         emoji = EMOJI_MAP.get(label_id, "❓")
@@ -303,7 +304,7 @@ async def analyze_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         response = f"""
 {emoji} **Analysis Result:** {cache_indicator}
 
-**VERDICT:** {'🚨 SCAM' if is_scam else '✅ SAFE' if label_id in [0, 1, 4] else '⚠️ SUSPICIOUS'}
+**VERDICT:** {'🚨 SCAM' if is_scam else '✅ SAFE'}
 
 **Type:** {label_name}
 **Confidence:** {confidence:.1%}
@@ -321,13 +322,6 @@ async def analyze_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 4. 📞 If it's about your bank, call your bank directly
 5. 🚨 Report this message to the platform
 6. 👨‍👩‍👧‍👦 Tell family members about this scam type
-"""
-        elif label_id == 4:  # Verification call
-            response += """
-1. ⚠️ Be cautious - verify caller's identity
-2. 📞 Call your bank/official number directly
-3. ❌ Never give OTP or passwords over phone
-4. 🔍 Check with official sources first
 """
         else:
             response += "✅ This message appears to be safe. But always stay cautious!"
@@ -360,10 +354,17 @@ def main() -> None:
     if not token:
         print("❌ Error: TELEGRAM_BOT_TOKEN environment variable not set!")
         print("Set it with: export TELEGRAM_BOT_TOKEN='your-token-here'")
+        print("or $env:TELEGRAM_BOT_TOKEN = 'your-token-here' for windows")
         return
 
-    # Create the Application
-    application = Application.builder().token(token).build()
+    # Create the Application with longer timeouts for stable connection
+    request = HTTPXRequest(
+        connect_timeout=30,      # Longer connection timeout
+        read_timeout=30,         # Longer read timeout
+        write_timeout=30,        # Longer write timeout
+        pool_timeout=30          # Longer pool timeout
+    )
+    application = Application.builder().token(token).request(request).build()
 
     # on different commands - answer in Telegram
     application.add_handler(CommandHandler("start", start))
