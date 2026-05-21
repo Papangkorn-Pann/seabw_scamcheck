@@ -3,11 +3,19 @@ import logging
 import sqlite3
 import hashlib
 import re
+import shutil
 from datetime import datetime
+from pathlib import Path
 from transformers import pipeline
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.request import HTTPXRequest
+
+# Try to import gdown for downloading from Google Drive
+try:
+    import gdown
+except ImportError:
+    gdown = None
 
 # Enable logging
 logging.basicConfig(
@@ -140,6 +148,47 @@ def get_cache_stats() -> dict:
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
         return {'total_unique': 0, 'total_reports': 0}
+
+def download_model_from_google_drive():
+    """Download model from Google Drive if not present locally."""
+    model_path = Path("../scam_detector_bert_final")
+
+    # If model already exists locally, use it
+    if model_path.exists():
+        print("✅ Model found locally!")
+        return
+
+    # Google Drive folder ID - user needs to update this
+    GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_MODEL_ID")
+
+    if not GOOGLE_DRIVE_FOLDER_ID:
+        print("⚠️ GOOGLE_DRIVE_MODEL_ID not set - using local model if available")
+        return
+
+    if gdown is None:
+        print("❌ gdown not installed - cannot download model from Google Drive")
+        print("Install with: pip install gdown")
+        return
+
+    try:
+        print("📥 Downloading model from Google Drive...")
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Download folder
+        gdown.download_folder(
+            id=GOOGLE_DRIVE_FOLDER_ID,
+            output="../scam_detector_bert_final",
+            quiet=False
+        )
+        print("✅ Model downloaded successfully!")
+    except Exception as e:
+        print(f"❌ Error downloading model: {e}")
+        print("You may need to:")
+        print("1. Set GOOGLE_DRIVE_MODEL_ID environment variable")
+        print("2. Make sure the Google Drive folder is publicly shared")
+
+# Download model from Google Drive if needed
+download_model_from_google_drive()
 
 # Load the trained BERT model
 print("Loading trained SCAMCHECK model...")
