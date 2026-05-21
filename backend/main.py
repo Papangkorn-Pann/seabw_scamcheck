@@ -6,7 +6,7 @@ import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from transformers import pipeline
+from transformers import pipeline, AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.request import HTTPXRequest
@@ -193,14 +193,33 @@ download_model_from_google_drive()
 # Load the trained BERT model
 print("Loading trained SCAMCHECK model...")
 try:
+    model_path = "../scam_detector_bert_final"
+
+    # Load config, model, and tokenizer separately for better compatibility
+    print("  📋 Loading config...")
+    config = AutoConfig.from_pretrained(model_path)
+
+    print("  🧠 Loading model weights...")
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_path,
+        config=config
+    )
+
+    print("  📝 Loading tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    # Create pipeline with loaded components
     classifier = pipeline(
         "text-classification",
-        model="../scam_detector_bert_final",
+        model=model,
+        tokenizer=tokenizer,
         device=-1  # Use CPU (-1), change to 0 for GPU
     )
     print("✅ Model loaded successfully!")
 except Exception as e:
     print(f"❌ Error loading model: {e}")
+    print(f"   Model path: {model_path}")
+    print(f"   Error type: {type(e).__name__}")
     classifier = None
 
 # Label mappings (Binary classifier: 0=Spam/Scam, 1=Safe/Ham)
