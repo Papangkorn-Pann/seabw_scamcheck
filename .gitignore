@@ -50,3 +50,6 @@ Thumbs.db
 *.tmp
 *.bak
 *.log
+
+# Temporary folders
+Text/
